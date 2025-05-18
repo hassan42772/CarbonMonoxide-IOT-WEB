@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MQ Gas Sensor Monitor</title>
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Font Awesome CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      text-align: center;
+      margin: 0;
+      /* padding: 30px; */
+      transition: background-color 0.3s, color 0.3s;
+    }
+
+    h1, h2 {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 4em;
+      margin-bottom: 40px;
+     
+
+    }
+
+    h2 {
+      font-size: 2.2em;
+      width: 40%;
+      padding: 20px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: start;
+      align-items: center;
+      
+    }
+    .reading{
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      
+      width: 100%;
+      height: 10vh;
+      width: 41.5%;
+      
+      border-radius: 60px;
+      margin:35px auto;
+     
+     
+    }
+
+    #value {
+      font-size: 2em;
+      width: 100%;
+      font-weight: bold;
+     
+      padding: 20px;
+      border-radius: 50px;
+    }
+
+    canvas {
+      max-width: 90%;
+      height: 400px;
+      margin: 0 auto;
+      border-radius: 40px;
+      box-shadow: rgba(0, 0, 0, 0.3) 0px 19px 38px, rgba(0, 0, 0, 0.22) 0px 15px 12px;
+      padding: 15px;
+    }
+
+    #toggleBtn {
+      position: absolute;
+      top: 20px;
+      right: 30px;
+      background: none;
+      border: none;
+      font-size: 1.5em;
+      cursor: pointer;
+      color: inherit;
+    }
+
+    /* Light Theme */
+    body.light {
+      background-color: #f4f7fc;
+      color: #333;
+    }
+
+    body.light h1 {
+      color: #000000;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1),
+                   0px 19px 38px rgba(0, 0, 0, 0.3);
+    }
+
+    body.light h2 {
+      color: rgb(254, 0, 0);
+      text-shadow: #ff3d00 0px 1px 18px, #ff3c009d 0px 1px 12px;
+
+     
+    }
+
+    body.light #value {
+      color: white;
+      background-color: #3eb26500;
+    }
+/* Shorthand property for setting most background properties at the same place in the style sh */
+    body.light canvas {
+      background: #ffffff;
+    }
+    body.light .reading {
+    background: rgba(0, 0, 0, 0.592);
+
+    }
+
+    /* Dark Theme */
+    body.dark {
+      background-color: #111;
+      color: #eee;
+    }
+
+    body.dark h1 {
+      color: #ffffff;
+      text-shadow: rgba(255, 255, 255, 0.3) 0px 19px 38px;
+    }
+
+    body.dark h2 {
+      color: #ff3d00;
+      text-shadow: #ff3d00 0px 19px 38px, #ff3c009d 0px 1px 12px;
+    }
+    body.dark .reading {
+      background: #388E3C;
+
+    }
+
+    body.dark #value {
+      color: #ffffff;
+      background-color: #ffffff00;
+    
+    }
+
+
+    body.dark canvas {
+      background: #1c1c1c;
+      box-shadow: #00e676 0px 19px 38px, #00e6779b 0px 5px 12px;
+      border: 1px solid #444;
+    }
+  </style>
+</head>
+<body class="light">
+  <button id="toggleBtn" title="Toggle Theme"><i class="fas fa-moon"></i></button>
+
+  <h1> 🚨 CO DETECTOR SYSTEM</h1>
+  <div class="reading">
+    <h2><i class="fas fa-circle" style="color: red;"></i> LIVE </h2>
+    <div id="value">Waiting for data...</div>
+  </div>
+  <canvas id="gasChart"></canvas>
+
+  <!-- Socket.IO -->
+  <script src="/socket.io/socket.io.js"></script>
+
+  <script>
+    const socket = io();
+    const valueDiv = document.getElementById('value');
+    const ctx = document.getElementById('gasChart').getContext('2d');
+    const toggleBtn = document.getElementById('toggleBtn');
+    const body = document.body;
+
+    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+    gradient.addColorStop(0, 'rgba(76,175,80,0.3)');
+    gradient.addColorStop(1, 'rgba(76,175,80,0)');
+
+    const shadowPlugin = {
+      id: 'shadowLine',
+      beforeDraw: (chart) => {
+        const ctx = chart.ctx;
+        ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+      },
+      afterDraw: (chart) => {
+        chart.ctx.restore();
+      }
+    };
+
+    const gasChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Gas Level',
+          data: [],
+          borderColor: '#388e3c',
+          backgroundColor: gradient,
+          fill: true,
+          tension: 0.7,
+          borderWidth: 4,
+          pointBackgroundColor: [],
+          pointRadius: [],
+          pointBorderColor: [],
+          pointBorderWidth: []
+        }]
+      },
+      options: {
+        responsive: true,
+        animation: {
+          duration: 2000,
+          easing: 'easeOutElastic'
+        },
+        plugins: {
+          legend: {
+            labels: { color: '#333' }
+          },
+          tooltip: {
+            backgroundColor: '#fff',
+            titleColor: '#000',
+            bodyColor: '#2e7d32',
+            borderColor: '#2e7d32',
+            borderWidth: 1,
+            cornerRadius: 5,
+            padding: 10
+          }
+        },
+        scales: {
+          x: {
+            ticks: { color: '#666' },
+            grid: { color: '#ddd' },
+            title: {
+              display: true,
+              text: 'Reading #',
+              color: '#666'
+            }
+          },
+          y: {
+            ticks: { color: '#666' },
+            grid: { color: '#ddd' },
+            min: 0,
+            max: 450,
+            title: {
+              display: true,
+              text: 'Gas Level',
+              color: '#666'
+            }
+          }
+        }
+      },
+      plugins: [shadowPlugin]
+    });
+
+    let counter = 0;
+    let timestamps = [];
+    const dataLifespan = 10 * 1000; // 10 seconds
+
+    socket.on('gasData', (value) => {
+      const now = Date.now();
+      valueDiv.innerText = `💭 GAS LEVEL: ${value}`;
+
+      const dataset = gasChart.data.datasets[0];
+
+      gasChart.data.labels.push(counter++);
+      dataset.data.push(value);
+      dataset.pointBackgroundColor.push('#388e3c');
+      dataset.pointRadius.push(0);
+      dataset.pointBorderColor.push('transparent');
+      dataset.pointBorderWidth.push(0);
+      timestamps.push(now);
+
+      // Style points based on value
+      const last = dataset.data.length - 1;
+      if (value >= 250) {
+        dataset.pointBackgroundColor[last] = '#d32f2f';
+        dataset.pointRadius[last] = 6;
+        dataset.pointBorderColor[last] = '#000';
+        dataset.pointBorderWidth[last] = 2;
+      } else {
+        dataset.pointBackgroundColor[last] = '#1976d2';
+        dataset.pointRadius[last] = 6;
+        dataset.pointBorderColor[last] = '#fff';
+        dataset.pointBorderWidth[last] = 2;
+      }
+
+      gasChart.update();
+    });
+
+    // Remove only 1 old point every 10 seconds
+    setInterval(() => {
+      const now = Date.now();
+      const ds = gasChart.data.datasets[0];
+
+      if (timestamps.length > 0 && now - timestamps[0] > dataLifespan) {
+        timestamps.shift();
+        gasChart.data.labels.shift();
+        ds.data.shift();
+        ds.pointBackgroundColor.shift();
+        ds.pointRadius.shift();
+        ds.pointBorderColor.shift();
+        ds.pointBorderWidth.shift();
+        gasChart.update();
+      }
+    }, 10000); // Every 10 seconds
+
+    // Theme toggle logic
+    toggleBtn.addEventListener('click', () => {
+      body.classList.toggle('light');
+      body.classList.toggle('dark');
+
+      const isDark = body.classList.contains('dark');
+      toggleBtn.innerHTML = isDark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+
+      gasChart.options.plugins.legend.labels.color = isDark ? '#eee' : '#333';
+      gasChart.options.scales.x.ticks.color = isDark ? '#ccc' : '#666';
+      gasChart.options.scales.x.grid.color = isDark ? '#333' : '#ddd';
+      gasChart.options.scales.y.ticks.color = isDark ? '#ccc' : '#666';
+      gasChart.options.scales.y.grid.color = isDark ? '#333' : '#ddd';
+      gasChart.options.scales.x.title.color = isDark ? '#aaa' : '#666';
+      gasChart.options.scales.y.title.color = isDark ? '#aaa' : '#666';
+      gasChart.options.plugins.tooltip.backgroundColor = isDark ? '#222' : '#fff';
+      gasChart.options.plugins.tooltip.titleColor = isDark ? '#fff' : '#000';
+      gasChart.options.plugins.tooltip.bodyColor = isDark ? '#0f0' : '#2e7d32';
+      gasChart.options.plugins.tooltip.borderColor = isDark ? '#0f0' : '#2e7d32';
+
+      gasChart.update();
+    });
+  </script>
+</body>
+</html>
